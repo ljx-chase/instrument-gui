@@ -1,0 +1,63 @@
+{
+  "skill_name": "instrument-gui",
+  "evals": [
+    {
+      "id": 0,
+      "name": "smu-iv-sweep-app",
+      "prompt": "We have a Keithley 2450 source meter on the bench (USB, talks SCPI through pyvisa). I want a small desktop app in python where I set a start voltage, stop voltage and step, hit go, and it sweeps and plots current vs voltage live while it's measuring, and saves every sweep so I can compare them later. Compliance current needs to be settable too, our samples are thin films and we've blown a couple. Can you write it for me?",
+      "expected_output": "A runnable Tkinter app with the driver on a worker thread (not the Tk thread), a simulated SMU so it runs with no hardware, queue-based communication, live plotting, per-sweep session logging, and a compliance limit treated as a safety setting.",
+      "files": [],
+      "assertions": [
+        "The instrument is driven from a background thread, not from the Tk callback chain: there is a threading.Thread (or equivalent) that owns the driver.",
+        "The worker communicates with the GUI through a queue rather than touching widgets directly.",
+        "A simulated/mock SMU class exists with the same interface as the real driver, so the app can run with no hardware attached.",
+        "The app can actually be launched and exercised without a Keithley connected (a --simulate flag, a checkbox, or an automatic fallback).",
+        "Each sweep is written to disk in its own identifiable file or folder, not appended into one anonymous blob.",
+        "The settings that define a sweep (start, stop, step, compliance) are recorded alongside the data, not only shown in the UI.",
+        "Compliance current is treated as a safety limit: it is set on the instrument before the output is enabled, and/or a compliance trip is detected and surfaced.",
+        "The instrument output is switched off on disconnect/close/error, so quitting cannot leave the sample energised.",
+        "Python files compile without syntax errors."
+      ]
+    },
+    {
+      "id": 1,
+      "name": "anneal-phase-protocol",
+      "prompt": "I need to record our TC300 temperature controller while a sample anneals. The protocol is: hold at room temp for 5 min to get a baseline, ramp to 180 C, hold there for 20 min, then cool back down. For the analysis afterwards I absolutely need to know exactly when each stage started and stopped, because I'm correlating it against spectra from another instrument. Last time I wrote the times down on paper and it was a mess. Can you build me something for this?",
+      "expected_output": "An app with an explicit phase state machine, per-sample phase labelling and elapsed-time columns, a phase log with entry/exit timestamps, a protocol snapshot, and a run summary distinguishing completed from aborted runs.",
+      "files": [],
+      "assertions": [
+        "There is an explicit phase/state machine with named phases (baseline, ramp, hold, cool) rather than ad-hoc timing logic scattered in callbacks.",
+        "Each phase transition is recorded with an absolute timestamp.",
+        "A per-phase log file or table is written with entry and exit times for every phase.",
+        "Every recorded sample carries which phase it belongs to.",
+        "Every recorded sample carries an elapsed-time column relative to run start and/or phase start, so analysis does not have to re-derive it from timestamps.",
+        "The protocol settings are snapshotted to a file at run start, so the run is reproducible.",
+        "A run summary distinguishes a completed run from an aborted/interrupted one.",
+        "The temperature controller is read on a background thread, not on the Tk callback chain.",
+        "A simulated temperature controller exists so the app runs with no hardware.",
+        "Python files compile without syntax errors."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "debug-freezing-monitor",
+      "prompt": "This is the photodiode logger we use day to day. It's fine at 200 ms per reading but if I set the interval down to 20 ms the window goes completely unresponsive - the plot stops updating and I have to kill it from task manager. The saved files are also really slow to write and I don't know why. Can you work out what's going on and fix it?",
+      "expected_output": "Diagnosis of the blocking driver call on the Tk thread and of savez_compressed's cost, plus a corrected version using a worker thread, a queue, a throttled redraw that reuses artists, and uncompressed saves.",
+      "files": [
+        "fixtures/photodiode_monitor.py"
+      ],
+      "assertions": [
+        "Identifies the root cause of the freeze: the blocking DAQ read runs on the Tk thread inside the after() callback chain, so the event loop cannot service the UI.",
+        "Explains why shortening the interval makes it worse rather than better (the per-cycle work exceeds the scheduling interval, so the loop never catches up).",
+        "Identifies np.savez_compressed as the cause of the slow writes, and that compression buys little on noisy float data.",
+        "The fix moves the blocking read onto a worker thread.",
+        "The fix uses a queue to hand data from the worker to the GUI.",
+        "The fix replaces savez_compressed with an uncompressed save (or otherwise removes the per-sample compression cost).",
+        "The fix stops calling ax.clear() + full replot every frame, reusing the line artist with set_data instead.",
+        "The redraw rate is throttled independently of the acquisition rate, rather than redrawing once per sample.",
+        "The explanation is specific to this file (names the actual functions/lines involved) rather than generic advice.",
+        "Python files compile without syntax errors."
+      ]
+    }
+  ]
+}
